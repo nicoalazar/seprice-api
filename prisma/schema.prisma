@@ -1,0 +1,164 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── USUARIOS / AUTH ───────────────────────────────────────
+
+enum RolUsuario {
+  ADMIN
+  MEDICO
+}
+
+model Usuario {
+  id        String     @id @default(uuid())
+  email     String     @unique
+  password  String
+  rol       RolUsuario
+  activo    Boolean    @default(true)
+  creadoEn  DateTime   @default(now())
+
+  medico    Medico?
+  admin     Administrativo?
+}
+
+// ─── PERSONAS ──────────────────────────────────────────────
+
+model Paciente {
+  id          String   @id @default(uuid())
+  dni         String   @unique
+  nombre      String
+  apellido    String
+  fechaNac    DateTime
+  telefono    String
+  obraSocial  String?
+  creadoEn    DateTime @default(now())
+
+  turnos      Turno[]
+}
+
+model Medico {
+  id           String      @id @default(uuid())
+  matricula    String      @unique
+  nombre       String
+  apellido     String
+  especialidad String
+  tarifa       Decimal     @db.Decimal(10, 2)
+  usuarioId    String      @unique
+
+  usuario      Usuario     @relation(fields: [usuarioId], references: [id])
+  agendas      Agenda[]
+  turnos       Turno[]
+  atenciones   Atencion[]
+  liquidaciones Liquidacion[]
+}
+
+model Administrativo {
+  id        String  @id @default(uuid())
+  nombre    String
+  apellido  String
+  usuarioId String  @unique
+
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+}
+
+// ─── AGENDA ────────────────────────────────────────────────
+
+model Agenda {
+  id             String   @id @default(uuid())
+  medicoId       String
+  diaSemana      Int      // 0=domingo ... 6=sábado
+  horaInicio     String   // "08:00"
+  horaFin        String   // "17:00"
+  duracionMin    Int      // minutos por turno (15, 25 o 30)
+  creadoEn       DateTime @default(now())
+
+  medico         Medico   @relation(fields: [medicoId], references: [id])
+  franjas        Franja[]
+}
+
+model Franja {
+  id          String   @id @default(uuid())
+  agendaId    String
+  fecha       DateTime @db.Date
+  hora        String   // "09:00"
+  disponible  Boolean  @default(true)
+  sobreturno  Boolean  @default(false)
+
+  agenda      Agenda   @relation(fields: [agendaId], references: [id])
+  turno       Turno?
+}
+
+// ─── TURNOS ────────────────────────────────────────────────
+
+enum EstadoTurno {
+  CONFIRMADO
+  PRESENTE_EN_SALA
+  ATENDIDO
+  CANCELADO
+  AUSENTE
+}
+
+enum TipoTurno {
+  NORMAL
+  SOBRETURNO
+  SEGUIMIENTO
+}
+
+enum ModalidadPago {
+  OBRA_SOCIAL
+  PARTICULAR
+}
+
+model Turno {
+  id             String        @id @default(uuid())
+  pacienteId     String
+  medicoId       String
+  franjaId       String        @unique
+  estado         EstadoTurno   @default(CONFIRMADO)
+  tipo           TipoTurno     @default(NORMAL)
+  modalidadPago  ModalidadPago?
+  autorizacion   String?       // resultado verificación obra social
+  creadoEn       DateTime      @default(now())
+  actualizadoEn  DateTime      @updatedAt
+
+  paciente       Paciente      @relation(fields: [pacienteId], references: [id])
+  medico         Medico        @relation(fields: [medicoId], references: [id])
+  franja         Franja        @relation(fields: [franjaId], references: [id])
+  atencion       Atencion?
+}
+
+// ─── ATENCIONES ────────────────────────────────────────────
+
+model Atencion {
+  id             String   @id @default(uuid())
+  turnoId        String   @unique
+  medicoId       String
+  diagnostico    String
+  prescripciones String?
+  derivacion     String?
+  registradoEn   DateTime @default(now())
+
+  turno          Turno    @relation(fields: [turnoId], references: [id])
+  medico         Medico   @relation(fields: [medicoId], references: [id])
+}
+
+// ─── LIQUIDACIONES ─────────────────────────────────────────
+
+model Liquidacion {
+  id           String   @id @default(uuid())
+  medicoId     String
+  periodoDesde DateTime @db.Date
+  periodoHasta DateTime @db.Date
+  cantTurnos   Int
+  montoUnitario Decimal @db.Decimal(10, 2)
+  montoTotal   Decimal  @db.Decimal(10, 2)
+  generadaEn   DateTime @default(now())
+
+  medico       Medico   @relation(fields: [medicoId], references: [id])
+}
